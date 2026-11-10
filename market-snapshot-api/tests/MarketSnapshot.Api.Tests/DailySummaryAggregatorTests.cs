@@ -44,7 +44,7 @@ public class DailySummaryAggregatorTests
 
         var result = DailySummaryAggregator.Aggregate(bars, NewYork);
 
-        result.Select(r => r.Date).ShouldBe(
+        result.Select(r => r.Day).ShouldBe(
             [new DateOnly(2026, 10, 12), new DateOnly(2026, 10, 13)]);
     }
 
@@ -85,6 +85,6 @@ public class DailySummaryAggregatorTests
         var bars = new[] { Bar("2026-10-13T00:30:00+00:00", 1m, 2m, 5) };
 
         DailySummaryAggregator.Aggregate(bars, NewYork).Single()
-            .Date.ShouldBe(new DateOnly(2026, 10, 12));
+            .Day.ShouldBe(new DateOnly(2026, 10, 12));
     }
 }
