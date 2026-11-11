@@ -41,6 +41,12 @@ Data comes from
 - **Other failures:** if Yahoo is unreachable, times out, or returns an
   unexpected response, the API returns a 502 error so it isn't mistaken for a
   bad symbol.
+- **Closing snapshot bar:** Yahoo appends a bar at the 16:00 ET close with
+  volume `0` and identical open/high/low/close: a closing-price snapshot, not
+  15 minutes of trading. Zero-volume bars are dropped when mapping Yahoo's
+  response, so they don't pull the day's averages toward the closing price.
+  Bars with `null` values are kept at that stage and skipped by the
+  aggregation rule above.
 
 ## Running locally
 
@@ -83,3 +89,15 @@ headers from `curl -i`; I noticed and re-captured it with only the JSON body.
 I wrote `DailySummaryAggregator.Aggregate` myself, using the AI-written tests as
 the spec and the AI for explanations and hints. I corrected AI examples that
 didn't match my model (`Time` is a `DateTimeOffset`; the class is static).
+
+### Yahoo mapper implementation
+I wrote `YahooProvider.Map` and its time zone helper myself, using the
+AI-written tests as the spec and the AI for reviews and hints. Mistakes I
+fixed along the way: chaining `!=` for the length check, an `async` helper
+with nothing to await (and not `static`, so `Map` couldn't call it), and
+`volume[i].Value`, which throws on null bars instead of letting them reach
+the aggregator.
+
+### Zero-volume closing bar
+Investigated the 16:00 zero-volume bar in the fixture and decided to exclude it in the mapper
+as it would throw off the daily averages.
