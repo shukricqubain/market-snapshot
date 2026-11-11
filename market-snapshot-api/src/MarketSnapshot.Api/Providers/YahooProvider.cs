@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using MarketSnapshot.Api.Models;
 
+
 namespace MarketSnapshot.Api.Providers;
 
 // Contract, exceptions and Yahoo DTOs live in IMarketDataProvider.cs, ProviderExceptions.cs and YahooDtos.cs.
@@ -49,7 +50,19 @@ public sealed class YahooProvider(HttpClient http) : IMarketDataProvider
             throw new NotImplementedException();
         }
     }
-
+    
+    private static TimeZoneInfo GetTimeZoneByName(string tzName)
+    {
+        try
+        {
+            return  TimeZoneInfo.FindSystemTimeZoneById(tzName);
+        }
+        catch (TimeZoneNotFoundException ex)
+        {
+            throw new UpstreamUnavailableException($"Unknown exchange time zone '{tzName}'.", ex);
+        }
+    }
+    
     // internal static + pure, so the mapper tests need no HTTP at all
     internal static IntradayData Map(YahooResult result)
     {
@@ -59,17 +72,30 @@ public sealed class YahooProvider(HttpClient http) : IMarketDataProvider
         if(result.Timestamp is not { } timestampArray )
             throw new UpstreamUnavailableException("Yahoo response has no timestamps.");
 
-        if(result.Indicators is not { } indicator)
-            throw new UpstreamUnavailableException("Yahoo response has no indicators.");
-
         if (result.Indicators?.Quote is not [var quote, ..])
             throw new UpstreamUnavailableException("Yahoo response has no quotes.");
 
-        //       (TimeZoneInfo.FindSystemTimeZoneById; bad or missing name -> Upstream)  
-        // TODO: guard that timestamp, low, high, volume exist and have equal lengths
-        // TODO: build one IntradayBar per index:
-        //       new IntradayBar(DateTimeOffset.FromUnixTimeSeconds(ts[i]), low[i], high[i], volume[i])
-        // TODO: zero-volume closing snapshot bar: your decision goes here, with a test
-        throw new NotImplementedException();
+        if (quote.Low is not { } low) 
+            throw new UpstreamUnavailableException("Yahoo response is missing Low.");
+
+        if (quote.High is not { } high) 
+            throw new UpstreamUnavailableException("Yahoo response is missing High.");
+
+        if (quote.Volume is not { } volume) 
+            throw new UpstreamUnavailableException("Yahoo response is missing volume.");
+        var timezone = GetTimeZoneByName(tzName);
+        var n = timestampArray.Length;
+        if (low.Length != n || high.Length != n || volume.Length != n)
+            throw new UpstreamUnavailableException("Yahoo quote arrays don't match the timestamp count.");
+
+        var bars = new List<IntradayBar>();
+        for(int i = 0 ; i < n; i++)
+        {
+            //skip zero bar
+            if(volume[i] == 0m) continue;
+            
+            bars.Add(new IntradayBar(DateTimeOffset.FromUnixTimeSeconds(timestampArray[i]), low[i], high[i], volume[i]));
+        }
+        return new IntradayData(bars, timezone);
     }
 }
