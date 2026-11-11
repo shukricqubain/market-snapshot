@@ -74,7 +74,12 @@ market-snapshot/
 
 Changes I made by hand, outside the AI:
 
-- Created both test fixtures (`tsla-1mo-15m.json`, `invalid-symbol.json`) by
-  calling the Yahoo endpoint with curl. The first capture of
-  `invalid-symbol.json` included HTTP headers from `curl -i`; I noticed and
-  re-captured it with only the JSON body.
+### Test fixtures
+Created both fixtures (`tsla-1mo-15m.json`, `invalid-symbol.json`) by calling the
+Yahoo endpoint with curl. The first capture of `invalid-symbol.json` included HTTP
+headers from `curl -i`; I noticed and re-captured it with only the JSON body.
+
+### Aggregator implementation
+I wrote `DailySummaryAggregator.Aggregate` myself, using the AI-written tests as
+the spec and the AI for explanations and hints. I corrected AI examples that
+didn't match my model (`Time` is a `DateTimeOffset`; the class is static).

@@ -6,11 +6,9 @@ namespace MarketSnapshot.Api.Tests;
 
 public class DailySummaryAggregatorTests
 {
-    private static readonly TimeZoneInfo NewYork =
-        TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+    private static readonly TimeZoneInfo NewYork = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
 
-    private static IntradayBar Bar(string iso, decimal? low, decimal? high, long? volume)
-        => new(DateTimeOffset.Parse(iso), low, high, volume);
+    private static IntradayBar Bar(string iso, decimal? low, decimal? high, long? volume) => new(DateTimeOffset.Parse(iso), low, high, volume);
 
     [Fact]
     public void Aggregate_EmptyInput_ReturnsEmptyList()
@@ -86,5 +84,23 @@ public class DailySummaryAggregatorTests
 
         DailySummaryAggregator.Aggregate(bars, NewYork).Single()
             .Day.ShouldBe(new DateOnly(2026, 10, 12));
+    }
+
+    [Fact]
+    public void Aggregate_AcrossDstChange_GroupsByLocalDate()
+    {
+        // US clocks fall back on Sunday 2026-11-01 (EDT -> EST), so Nov 2 is UTC-5.
+        // 04:30 UTC on 11/02 is 23:30 EST on 11/01; 05:30 UTC is 00:30 EST on 11/02.
+        // A fixed -04:00 offset would put both bars on 11/02 and return one day.
+        var bars = new[]
+        {
+            Bar("2026-11-02T04:30:00+00:00", 1m, 2m, 5),
+            Bar("2026-11-02T05:30:00+00:00", 3m, 4m, 7),
+        };
+
+        var result = DailySummaryAggregator.Aggregate(bars, NewYork);
+
+        result.Select(r => r.Day).ShouldBe(
+            [new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 2)]);
     }
 }

@@ -28,11 +28,11 @@
 - **AI output:** 547 bars over 21 trading days, 26 bars per full day, no nulls in
   this sample, plus a stray 16:00 bar with zero volume on the current day.
 - **Kept:** The fixture as test data, and the zero-volume-bar finding, which I
-  hadn't noticed. Decision on handling it: `[confirm]`.
+  hadn't noticed.
 - **Changed/rejected:** The AI had overstated the time-zone risk. Regular-session
   bars land on the same date in UTC and New York, so the real risk is lower than
-  claimed. I still group by exchange time zone and test across the DST change
-  (10/30 to 11/02).
+  claimed. I still group by exchange time zone, and a later test covers the
+  2026-11-01 DST change (see entry 8).
   Looking at this output, I also rejected the AI's earlier suggestion (entry 1)
   to reach out about what `lowAverage` and `highAverage` mean. Each 15-minute
   bar has its own `low` and `high`, so after grouping by day the natural reading
@@ -41,11 +41,11 @@
 
 ## 3. Cross-checking expected daily values
 - **Prompt:** Asked for a prototype aggregation of the fixture.
-- **Why:** I wanted independent expected values for golden tests.
+- **Why:** I wanted independent expected values to check my implementation against.
 - **AI output:** A Python script and per-day results, for example 2026-10-12:
   low 378.7496, high 379.8398, volume 17,558,067.
-- **Kept:** The values as a cross-check only. `[confirm: I verified them against
-  my own C# output / tests]`.
+- **Kept:** Used the values as a cross-check only. I did not copy them into tests
+  without confirming them against the fixture.
 
 ## 4. Project structure and scaffolding
 - **Prompt:** "I'm planning on making the project structure like so: the root
@@ -73,7 +73,48 @@
 - **Kept:** The tests and design decisions: a bar with any null field is
   dropped entirely, rounding is applied once to the final mean using
   `MidpointRounding.AwayFromZero`, and `decimal` is used for prices.
-- **Result:** 6 red tests committed before any implementation.
+- **Result:** All six tests existed and failed (the aggregator threw
+  `NotImplementedException`) before I wrote any implementation.
+
+## 6. Implementing the aggregator (guided, not generated)
+- **Prompt:** Pasted the `Aggregate` signature and asked what each part of it
+  means and how to approach it, asking for hints instead of a solution.
+- **Why:** I wanted to write the implementation myself and use the AI as a guide.
+- **AI output:** Explained the signature (static class, `IEnumerable` input,
+  `TimeZoneInfo` implying exchange-local days) and suggested a
+  convert-group-compute-round-sort pipeline.
+- **Kept:** Grouping by a `DateOnly` built from
+  `TimeZoneInfo.ConvertTime(bar.Time, exchangeTimeZone).DateTime`, and
+  collecting summaries into a list returned after the loop.
+- **Changed/rejected:** The AI's examples used a `Timestamp` property,
+  `ConvertTimeFromUtc`, and `new DailySummaryAggregator()`. None fit my code
+  (the property is `Time`, a `DateTimeOffset`, and the class is static), so I
+  corrected each against the real model. I rejected grouping by a formatted
+  date string: it sorts as text and adds nothing.
+
+## 7. Null handling and rounding failures
+- **Prompt:** Pasted my implementation and the two failing test outputs.
+- **Why:** The null test and the rounding test failed and I didn't understand why.
+- **AI output:** Explained that `Math.Round` defaults to banker's rounding, so
+  the `AwayFromZero` test failed, and that "skipped entirely" means dropping
+  the bar, not the day.
+- **Kept:** `MidpointRounding.AwayFromZero` on both averages, and filtering out
+  any bar with a null field before grouping.
+- **Changed/rejected:** The AI's earlier advice was to skip only all-null days
+  and to treat volume as null-safe. Both were wrong for this spec, and the
+  test name caught them. I also removed the leftover debug `Console.WriteLine`.
+
+## 8. DST grouping test
+- **Prompt:** Pointed out that my log claimed DST coverage but no test had it,
+  and asked for one.
+- **Why:** All six provided tests used October (EDT) dates, so nothing exercised
+  the 2026-11-01 fall-back.
+- **AI output:** `Aggregate_AcrossDstChange_GroupsByLocalDate`, with two bars
+  straddling local midnight after the clocks change (04:30 and 05:30 UTC on 11/02,
+  which are 23:30 on 11/01 and 00:30 on 11/02 in New York).
+- **Kept:** The test as written.
+- **Changed/rejected:** Rejected my first single-bar version for the two-bar one,
+  because a hard-coded summer offset would still pass with one bar.
 
 ## Manual changes
 See the Manual changes section of the [README](README.md).
