@@ -169,3 +169,11 @@ endpoint tests as the spec and the AI for reviews. With the AI's help I replaced
 my planned length-and-characters check with one anchored `[GeneratedRegex]`
 ending in `\z`. Review caught my mistakes: an unreturned 400 result, awaiting a
 synchronous method, and a missing `partial`. Details are in PROMPT_LOG entry 18.
+
+### React UI
+I wrote `fetchDailySummaries`, the component split, `SymbolSearchForm`,
+`DailySummaryTable`, and `App`'s state and rendering myself, with the AI-written
+UI tests as the spec and the AI for reviews. The exception is `App.handleSearch`
+(cancelling the previous request, loading and error state): the AI wrote it at
+my request after my own attempt didn't work, and explained how it works. Details
+are in PROMPT_LOG entries 20 and 21.
