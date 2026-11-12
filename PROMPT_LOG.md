@@ -255,5 +255,44 @@
   with a period, which would have reported every unknown symbol as a 502. The
   `NotFoundWithYahooErrorBody` test caught it before I committed.
 
+## 17. Tests for the daily summary endpoint
+- **Prompt:** "Please generate the tests for the daily summary endpoint while I
+  start working on the TODOs you left on the boilerplate."
+- **Why:** To keep the same split: the AI writes the tests, and I write the
+  endpoint logic against them.
+- **Decision:** A valid symbol is 1-10 characters of letters (any case),
+  digits, `.`, `-` or `^`, so share classes (`BRK.B`), indices (`^GSPC`) and
+  crypto pairs (`BTC-USD`) work. An invalid symbol gets a 400 before Yahoo is
+  called. The AI proposed this rule and I accepted it.
+- **AI output:** 20 `WebApplicationFactory` tests that check the raw JSON
+  contract (exact property names, `"day"` as `yyyy-MM-dd`, oldest first, an
+  empty array for no bars), valid and invalid symbols (including an attempt to
+  inject `?x=1` into the Yahoo URL), 404 and 502 ProblemDetails with a `detail`
+  the UI can show, and CORS for the UI origin.
+- **Kept:** The tests as written.
+- **Verified:** Before I implemented anything, the AI ran the tests against a
+  throwaway handler in a scratch copy outside the repo, to confirm the tests
+  themselves were correct (for example, that routing decodes `%5EGSPC` to
+  `^GSPC`). The throwaway was never added to the project.
+
+## 18. Implementing the daily summary endpoint (guided, not generated)
+- **Prompt:** Asked why `DailySummaryAggregator` wasn't recognized and whether it
+  needed to be passed in as a parameter, then for a review of the handler.
+- **Why:** I wanted to write the handler myself, with entry 17's tests as the spec.
+- **AI output:** Explained that the aggregator is a static class in the
+  `Services` namespace, so it needs a `using`, not dependency injection: DI is for
+  things you'd swap or fake, like the provider. The review also found three more
+  bugs in my code.
+- **Kept:** A `[GeneratedRegex]` symbol check, `TypedResults.Ok` for success, and
+  `TypedResults.Problem` with the exception message for 404 and 502.
+- **Changed/rejected:** I was first going to write a simpler check (a length
+  limit plus allowing characters like `^` and `-`). The AI helped me get to a
+  single anchored regex, including ending it with `\z` instead of `$`, because
+  `$` also matches just before a trailing newline, so `"TSLA\n"` would pass.
+- **My mistakes, caught in review:** awaiting the synchronous `Aggregate`
+  method; building the 400 `Problem` result without returning it, so execution
+  would have carried on and called the provider with the bad symbol; and not
+  marking the class `partial`, which `[GeneratedRegex]` requires.
+
 ## Manual changes
 See the Manual changes section of the [README](README.md).
