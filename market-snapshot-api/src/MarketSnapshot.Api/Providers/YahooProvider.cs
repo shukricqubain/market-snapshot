@@ -32,7 +32,7 @@ public sealed class YahooProvider(HttpClient http) : IMarketDataProvider
         }
         catch (Polly.Timeout.TimeoutRejectedException ex)
         {
-            throw new UpstreamUnavailableException("Yahoo Finance timed out (Polly)", ex);
+            throw new UpstreamUnavailableException("Yahoo Finance timed out.", ex);
         }
         using (response)
         {
@@ -63,13 +63,13 @@ public sealed class YahooProvider(HttpClient http) : IMarketDataProvider
                     .ReadFromJsonAsync<YahooResponse>(JsonOptions, ct);
 
                 if (yahoo?.Chart?.Result is not [var result, ..])
-                    throw new UpstreamUnavailableException("...");
+                    throw new UpstreamUnavailableException("Yahoo Finance provided no results.");
 
                 return Map(result);
             }
             catch (JsonException ex)
             {
-                throw new UpstreamUnavailableException("Yahoo Finance returned no chart data", ex);
+                throw new UpstreamUnavailableException("Yahoo Finance returned an unreadable response", ex);
             }
         }
     }
