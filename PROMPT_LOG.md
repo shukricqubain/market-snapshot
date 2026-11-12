@@ -294,5 +294,64 @@
   would have carried on and called the provider with the bad symbol; and not
   marking the class `partial`, which `[GeneratedRegex]` requires.
 
+## 19. Frontend tests
+- **Prompt:** "After that please generate the frontend tests and also show me how
+  I can run the React app."
+- **Why:** Same split as the backend: the AI writes the tests, and I write
+  `fetchDailySummaries` and `App` against them.
+- **Decisions (written into the tests):** 4xx errors show the API's `detail`,
+  which is written for users ("Symbol 'ZZZZ' was not found."). 5xx and network
+  failures show friendly messages instead, because the 502 detail is an internal
+  upstream reason ("Yahoo Finance timed out."). Prices show exactly 4 decimals and
+  volume uses thousands separators. Search stays disabled until a non-blank symbol
+  is typed, and the symbol is trimmed. An aborted request passes through unchanged
+  so the UI can ignore a superseded search.
+- **AI output:** 19 Vitest + React Testing Library + MSW tests: 8 for
+  `fetchDailySummaries` (success, URL encoding, 400/404 detail, 502, a non-JSON
+  500, network failure, abort) and 11 for `App` (labelled input and button,
+  table contents and formatting, Enter to submit, loading, empty, error states,
+  and clearing an old error). Elements are queried by role and label, the way a
+  user or screen reader finds them. Also the commands to run the API and the UI
+  together locally.
+- **Kept:** The tests, committed together as one red step for the UI.
+- **Verified:** The AI ran the tests against a throwaway implementation outside
+  the repo; all 19 passed and `tsc` was clean.
+- **Caught (AI mistake):** The AI's first verification script had a line outside
+  its `&&` chain, so when an earlier step failed, that line overwrote my real
+  `App.tsx` stub with the throwaway code. The AI spotted it in `git status`,
+  confirmed the diff was only its own code and that I hadn't edited the file
+  since the scaffold commit, and restored it with `git restore`. Nothing of mine
+  was lost. It then redid the check using absolute scratch paths and stopping on
+  the first error.
+
+## 20. Implementing fetchDailySummaries (guided, not generated)
+- **Prompt:** "How do I use the signal and determine whether its response is ok?"
+  Then three rounds of "can you check my code", including "I'm not sure where the
+  rethrow aborts check should be."
+- **Why:** I wanted to write the fetch layer myself, with entry 19's 8 tests as
+  the spec.
+- **AI output:** Explained that the signal is just passed to `fetch`, and that
+  `fetch` only rejects when no response arrives (network down, API not running,
+  aborted). A 404 or 502 still resolves, so `response.ok` (200-299) and
+  `response.status` have to be checked by hand, much like `IsSuccessStatusCode`
+  on the backend. Each review pointed at the failing test or `tsc` error.
+- **Kept:** A `try/catch` around only the `fetch` call (rethrow `AbortError`,
+  otherwise throw "Could not reach the server."), then `response.ok`, then
+  `status >= 500` for a friendly message, then parsing the ProblemDetails in a
+  small `try` and throwing its `detail` after it.
+- **Changed/rejected (my mistakes, caught by the tests, `tsc` or review):**
+  - reading `error.name` on a `catch` variable, which is `unknown` in strict
+    TypeScript. Vitest doesn't type-check, so only `tsc` caught it.
+  - throwing strings instead of `Error`s, so the UI would have read an undefined
+    `message`
+  - keeping the response branches inside the `try`, so a 5xx would have been
+    reported as "could not reach the server"
+  - `return` instead of `throw` for the 5xx case, and `> 500` instead of `>= 500`
+  - a `catch` that rethrew aborts but silently swallowed network errors, so the
+    function resolved `undefined`
+  - a 4xx `catch` that swallowed my own `throw new Error(problem.detail)`
+- **Result:** All 8 `fetchDailySummaries` tests pass and `tsc` is clean. The
+  `App` tests stay red until `App` is implemented.
+
 ## Manual changes
 See the Manual changes section of the [README](README.md).
