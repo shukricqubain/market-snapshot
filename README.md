@@ -101,3 +101,9 @@ the aggregator.
 ### Zero-volume closing bar
 Investigated the 16:00 zero-volume bar in the fixture and decided to exclude it in the mapper
 as it would throw off the daily averages.
+
+### GetIntradayAsync implementation
+I wrote the response handling in `YahooProvider.GetIntradayAsync` myself, with
+the AI-written HTTP tests as the spec and the AI for hints and reviews, then
+cleaned up its error messages in a separate refactor commit. The tests caught a
+mistake I made during that refactor (a typo in the matched "Not Found" code).
