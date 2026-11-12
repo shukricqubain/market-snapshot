@@ -1,12 +1,15 @@
+using System.Text.RegularExpressions;
 using MarketSnapshot.Api.Models;
 using MarketSnapshot.Api.Providers;
-
 namespace MarketSnapshot.Api.Endpoints;
+using MarketSnapshot.Api.Services;
 
 // Extension method so Program.cs stays a short list of registrations (app.MapDailySummaryEndpoints()).
 // New endpoint groups get their own file and Map...Endpoints method as the API grows.
-public static class DailySummaryEndpoints
+public static partial class DailySummaryEndpoints
 {
+    [GeneratedRegex(@"^[A-Za-z0-9.^-]{1,10}\z")]
+    private static partial Regex SymbolRegex();
     public static IEndpointRouteBuilder MapDailySummaryEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/stocks/{symbol}/daily-summaries", GetDailySummariesAsync)
@@ -25,13 +28,23 @@ public static class DailySummaryEndpoints
     internal static async Task<IResult> GetDailySummariesAsync(
         string symbol, IMarketDataProvider provider, CancellationToken ct)
     {
-        // TODO: validate the symbol (strict regex + length limit) before calling the provider.
-        //       Invalid -> TypedResults.Problem(..., statusCode: 400)
-        // TODO: call provider.GetIntradayAsync, then DailySummaryAggregator.Aggregate(bars, timeZone)
-        //       -> TypedResults.Ok(summaries)
-        // TODO: SymbolNotFoundException -> 404 ProblemDetails with a message the UI can show
-        //       UpstreamUnavailableException -> 502 ProblemDetails
-        await Task.CompletedTask;
-        throw new NotImplementedException();
+        bool validSymbol = SymbolRegex().IsMatch(symbol);
+        if(!validSymbol)
+            return TypedResults.Problem("Invalid Symbol was provided", statusCode: 400);
+        
+        try
+        {
+            var intraDay = await provider.GetIntradayAsync(symbol, ct); 
+            var summaries =  DailySummaryAggregator.Aggregate(intraDay.Bars, intraDay.ExchangeTimeZone);
+            return TypedResults.Ok(summaries);
+        }
+        catch (SymbolNotFoundException ex)
+        {
+            return TypedResults.Problem(ex.Message, statusCode: 404);
+        }
+        catch (UpstreamUnavailableException ex)
+        {
+            return TypedResults.Problem(ex.Message, statusCode: 502);
+        }
     }
 }
