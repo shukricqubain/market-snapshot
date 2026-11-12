@@ -26,6 +26,8 @@ internal sealed class StubHttpMessageHandler(Func<HttpRequestMessage, HttpRespon
         HttpRequestMessage request, CancellationToken cancellationToken)
     {
         LastRequest = request;
+        // Real handlers stop when the caller cancels; HttpClient doesn't check the token for us.
+        cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(respond(request));
     }
 
