@@ -9,7 +9,7 @@ namespace MarketSnapshot.Api.Providers;
 
 public sealed class YahooProvider(HttpClient http) : IMarketDataProvider
 {
-    // Web defaults = camelCase + case-insensitive, so Yahoo's JSON maps to the records above
+    // Web defaults = camelCase + case-insensitive, so Yahoo's JSON maps to the records in YahooDtos.cs
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public async Task<IntradayData> GetIntradayAsync(string symbol, CancellationToken ct)
@@ -30,58 +30,81 @@ public sealed class YahooProvider(HttpClient http) : IMarketDataProvider
             // Cancelled but not by the caller means the HttpClient timed out
             throw new UpstreamUnavailableException("Yahoo Finance timed out.", ex);
         }
-        // TODO: Program.cs now adds a resilience handler that owns the timeouts. Its timeout throws
-        //       Polly.Timeout.TimeoutRejectedException, not TaskCanceledException, so catch that here
-        //       too, or a timeout will surface as a 500 instead of a 502.
-
+        catch (Polly.Timeout.TimeoutRejectedException ex)
+        {
+            throw new UpstreamUnavailableException("Yahoo Finance timed out (Polly)", ex);
+        }
         using (response)
         {
-            // TODO: read the body as a string once. It's needed for both success and 404.
-            // TODO: HttpStatusCode.NotFound -> parse the body and check chart.error.
-            //       Recognized "not found" shape (see invalid-symbol.json) -> throw SymbolNotFoundException(symbol)
-            //       Anything else -> throw UpstreamUnavailableException
-            // TODO: 429 and 5xx -> UpstreamUnavailableException
-            // TODO: other non-success -> UpstreamUnavailableException
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                try
+                {
+                    var notFoundBody = await response.Content
+                        .ReadFromJsonAsync<YahooResponse>(JsonOptions, ct);
 
-            // TODO: deserialize the success body into YahooResponse (catch JsonException -> Upstream)
-            // TODO: null/empty chart.result -> Upstream (or NotFound? decide and test it)
+                    if (notFoundBody?.Chart?.Error is { Code: "Not Found" })
+                        throw new SymbolNotFoundException(symbol);
+                }
+                catch (JsonException)
+                {
+                    // body wasn't JSON, so it's not the recognized shape; fall through
+                }
 
-            // return Map(yahooResult);
-            throw new NotImplementedException();
+                throw new UpstreamUnavailableException("Yahoo Finance returned 404 with an unrecognized body.");
+            }
+
+            if (!response.IsSuccessStatusCode)
+                throw new UpstreamUnavailableException($"Yahoo Finance returned {(int)response.StatusCode} {response.StatusCode}.");
+
+            try
+            {
+                var yahoo = await response.Content
+                    .ReadFromJsonAsync<YahooResponse>(JsonOptions, ct);
+
+                if (yahoo?.Chart?.Result is not [var result, ..])
+                    throw new UpstreamUnavailableException("...");
+
+                return Map(result);
+            }
+            catch (JsonException ex)
+            {
+                throw new UpstreamUnavailableException("Yahoo Finance returned no chart data", ex);
+            }
         }
     }
-    
+
     private static TimeZoneInfo GetTimeZoneByName(string tzName)
     {
         try
         {
-            return  TimeZoneInfo.FindSystemTimeZoneById(tzName);
+            return TimeZoneInfo.FindSystemTimeZoneById(tzName);
         }
         catch (TimeZoneNotFoundException ex)
         {
             throw new UpstreamUnavailableException($"Unknown exchange time zone '{tzName}'.", ex);
         }
     }
-    
+
     // internal static + pure, so the mapper tests need no HTTP at all
     internal static IntradayData Map(YahooResult result)
     {
         if (result.Meta?.ExchangeTimezoneName is not { } tzName)
             throw new UpstreamUnavailableException("Yahoo response has no exchange time zone.");
-        
-        if(result.Timestamp is not { } timestampArray )
+
+        if (result.Timestamp is not { } timestampArray)
             throw new UpstreamUnavailableException("Yahoo response has no timestamps.");
 
         if (result.Indicators?.Quote is not [var quote, ..])
             throw new UpstreamUnavailableException("Yahoo response has no quotes.");
 
-        if (quote.Low is not { } low) 
+        if (quote.Low is not { } low)
             throw new UpstreamUnavailableException("Yahoo response is missing Low.");
 
-        if (quote.High is not { } high) 
+        if (quote.High is not { } high)
             throw new UpstreamUnavailableException("Yahoo response is missing High.");
 
-        if (quote.Volume is not { } volume) 
+        if (quote.Volume is not { } volume)
             throw new UpstreamUnavailableException("Yahoo response is missing volume.");
         var timezone = GetTimeZoneByName(tzName);
         var n = timestampArray.Length;
@@ -89,11 +112,11 @@ public sealed class YahooProvider(HttpClient http) : IMarketDataProvider
             throw new UpstreamUnavailableException("Yahoo quote arrays don't match the timestamp count.");
 
         var bars = new List<IntradayBar>();
-        for(int i = 0 ; i < n; i++)
+        for (int i = 0; i < n; i++)
         {
             //skip zero bar
-            if(volume[i] == 0m) continue;
-            
+            if (volume[i] == 0m) continue;
+
             bars.Add(new IntradayBar(DateTimeOffset.FromUnixTimeSeconds(timestampArray[i]), low[i], high[i], volume[i]));
         }
         return new IntradayData(bars, timezone);
