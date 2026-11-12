@@ -353,5 +353,51 @@
 - **Result:** All 8 `fetchDailySummaries` tests pass and `tsc` is clean. The
   `App` tests stay red until `App` is implemented.
 
+## 21. Building the React UI (AI-assisted, partly AI-written)
+- **Prompts:** "Do I need to create a component or add this directly into
+  App.tsx?", then several rounds of "can you take a look at my React code", and
+  finally "please fix the errors I made in the function and explain how it works."
+- **Why:** React is the part of the stack I'm least practised in, and I was short
+  on time. I wanted a structure I could defend and working code I understood,
+  even where I didn't write every line myself.
+- **AI output:** Recommended a light split, the React equivalent of Angular's
+  container and presentational components: `App` owns state, the fetch and
+  cancellation; `SymbolSearchForm` and `DailySummaryTable` only take props. A
+  custom hook or state library would be over-engineering for this MVP. The AI
+  reviewed each version against the failing tests and `tsc`, mapped its outline
+  of `App` onto real React code (`useState`, `useRef`, conditional rendering with
+  `&&`), and in the end **wrote the `handleSearch` function in `App.tsx` for me**,
+  after my own attempt didn't work, explaining each line.
+- **What I wrote, with review:** the component split, `SymbolSearchForm` (a
+  labelled input, `onSearch` callback prop, disabled until a symbol is typed,
+  `maxLength` matching the API's 10-character limit), `DailySummaryTable`, and
+  `App`'s imports, state, and JSX.
+- **What the AI wrote:** `handleSearch`, which aborts the previous request,
+  resets state, awaits the fetch, ignores `AbortError`, shows other errors, and
+  only lets the latest search switch off the loading state.
+- **How `handleSearch` works (so I can explain it):** each search creates a new
+  `AbortController` kept in a `useRef` and cancels the one before it, so a slow
+  old response can't overwrite newer results. The `finally` block compares its
+  own controller to the ref, so a cancelled search can't hide the spinner of the
+  search that replaced it.
+- **Changed/rejected (my mistakes, caught by the tests, `tsc` or review):**
+  - redeclaring a `DailySummary` type in the table with the wrong field names
+    (`date`/`low`/`high`), the same mistake as the duplicated provider types in
+    entry 13. I switched to importing the shared type from `api/types`.
+  - a placeholder instead of a `<label>`, which screen readers don't reliably
+    announce, and which the label-based tests couldn't find
+  - a `console.log` instead of a callback prop on the form
+  - `toFixed(2)` instead of 4 decimals, and `toLocaleString()` without a fixed
+    locale
+  - default imports for `useState` and `useRef` (they're named exports), and
+    calling hooks at module level instead of inside the component
+  - in my `handleSearch` attempt: assigning to state instead of calling its
+    setter, a `catch` variable that shadowed the `error` state, comparing to an
+    undefined `AbortError`, and an empty `finally`
+  - table headers in title case ("Low Average") while the tests expected
+    sentence case ("Low average")
+- **Result:**
+  All 19 UI tests pass and tsc is clean
+
 ## Manual changes
 See the Manual changes section of the [README](README.md).

@@ -53,6 +53,10 @@ Data comes from
 ### Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
+- [Node.js](https://nodejs.org/) LTS: 22.12+, 24, or 26 (required by the
+  current Vite and Vitest)
+
+Run the API and the UI in two terminals, starting from the repository root.
 
 ### API
 
@@ -63,7 +67,52 @@ dotnet test
 dotnet run --project src/MarketSnapshot.Api
 ```
 
-_Endpoint usage and frontend instructions to be added._
+The API listens on `http://localhost:5015`.
+
+- `GET /api/stocks/{symbol}/daily-summaries`, for example
+  `http://localhost:5015/api/stocks/TSLA/daily-summaries`, returns one entry per
+  trading day, oldest first:
+
+  ```json
+  [ { "day": "2026-10-12", "lowAverage": 378.7496, "highAverage": 379.8398, "volume": 17558067 } ]
+  ```
+
+  A symbol is 1-10 characters of letters, digits, `.`, `-` or `^` (for example
+  `BRK.B`, `^GSPC`, `BTC-USD`). Errors are returned as
+  [ProblemDetails](https://www.rfc-editor.org/rfc/rfc9457) JSON: `400` for an
+  invalid symbol, `404` for an unknown symbol, and `502` when Yahoo Finance is
+  unavailable or returns an unexpected response.
+- `GET /health` is a health check.
+- `GET /openapi/v1.json` is the OpenAPI description (Development only).
+
+The tests never call Yahoo; they use recorded responses in
+`tests/MarketSnapshot.Api.Tests/Fixtures/`.
+
+### UI
+
+```bash
+cd market-snapshot-ui
+npm ci
+npm run dev
+```
+
+Open `http://localhost:5173`, enter a symbol such as `TSLA`, and press Search.
+The dev server uses port 5173 on purpose: it's the origin the API allows through
+CORS (`Cors:AllowedOrigins` in `appsettings.Development.json`).
+
+The UI calls `http://localhost:5015` by default. To point it at a different API,
+copy `.env.example` to `.env.local` and set `VITE_API_BASE_URL`.
+
+Other scripts:
+
+```bash
+npm test          # run the tests once (Vitest, React Testing Library, MSW)
+npm run test:watch
+npm run build     # type-check with tsc, then build to dist/
+```
+
+The UI tests mock the API with MSW, so the API doesn't need to be running for
+them.
 
 ## Project structure
 
@@ -72,6 +121,12 @@ market-snapshot/
 ├── market-snapshot-api/
 │   ├── src/MarketSnapshot.Api/          # Minimal API: Models, Services, Providers, Endpoints
 │   └── tests/MarketSnapshot.Api.Tests/  # xUnit tests and Yahoo response fixtures
+├── market-snapshot-ui/
+│   └── src/
+│       ├── api/                         # fetch client, shared types, API URL config
+│       ├── components/                  # SymbolSearchForm, DailySummaryTable
+│       ├── test/                        # MSW server, handlers and test setup
+│       └── App.tsx                      # state, fetching and cancellation
 ├── PROMPT_LOG.md                        # AI prompts used, and what was kept or changed
 └── README.md
 ```
@@ -108,7 +163,7 @@ the AI-written HTTP tests as the spec and the AI for hints and reviews, then
 cleaned up its error messages in a separate refactor commit. The tests caught a
 mistake I made during that refactor (a typo in the matched "Not Found" code).
 
-## Daily summary endpoint
+### Daily summary endpoint
 I wrote the handler in `DailySummaryEndpoints.cs` myself, with the AI-written
 endpoint tests as the spec and the AI for reviews. With the AI's help I replaced
 my planned length-and-characters check with one anchored `[GeneratedRegex]`
