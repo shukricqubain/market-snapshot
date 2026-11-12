@@ -107,3 +107,10 @@ I wrote the response handling in `YahooProvider.GetIntradayAsync` myself, with
 the AI-written HTTP tests as the spec and the AI for hints and reviews, then
 cleaned up its error messages in a separate refactor commit. The tests caught a
 mistake I made during that refactor (a typo in the matched "Not Found" code).
+
+## Daily summary endpoint
+I wrote the handler in `DailySummaryEndpoints.cs` myself, with the AI-written
+endpoint tests as the spec and the AI for reviews. With the AI's help I replaced
+my planned length-and-characters check with one anchored `[GeneratedRegex]`
+ending in `\z`. Review caught my mistakes: an unreturned 400 result, awaiting a
+synchronous method, and a missing `partial`. Details are in PROMPT_LOG entry 18.
